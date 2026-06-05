@@ -1,0 +1,78 @@
+Encontré **3 errores** en el proyecto:
+
+---
+
+### 🔴 Error 1 — Nombre de función incorrecto en `home.controller.js`
+
+**Archivo:** `src/controllers/home.controller.js` (línea 4)
+
+```js
+// ❌ Llama a getReservations (plural)
+const reservations = await getReservations();
+```
+
+Pero en `src/services/reservation.service.js` la función exportada se llama `getReservation` (sin la "s"):
+
+```js
+// El servicio exporta esto:
+export const getReservation = () => http.get("/reservations");
+```
+
+**Fix:** cambiar el import y el llamado en `home.controller.js`:
+```js
+import { getReservation } from "@services/reservation.service";
+// ...
+const reservations = await getReservation();
+```
+
+---
+
+### 🔴 Error 2 — Import con alias incorrecto en `home.controller.js`
+
+**Archivo:** `src/controllers/home.controller.js` (líneas 1–2)
+
+```js
+// ❌ Usa @components y @services sin la barra /
+import ReservationCard from "@components/ReservationCard";
+import { getReservations } from "@services/reservation.service";
+```
+
+El `vite.config.js` define los alias con `@/`, no `@` a secas. El resto del proyecto usa consistentemente `@/components/...` y `@/services/...`. Esto causará un error de resolución de módulo.
+
+**Fix:**
+```js
+import ReservationCard from "@/components/ReservationCard";
+import { getReservation } from "@/services/reservation.service";
+```
+
+---
+
+### 🟡 Error 3 — El botón de logout no llama `removeSession()` en `Sidebar.js`
+
+**Archivo:** `src/components/Sidebar.js` (líneas 5–9)
+
+```js
+document.querySelector("#logoutBtn")?.addEventListener("click", () => {
+  navigateTo("/");  // ❌ Navega pero NO limpia la sesión
+});
+```
+
+`removeSession` está importada al inicio del archivo pero nunca se usa. Si el usuario hace logout y vuelve a `/`, la sesión sigue guardada en `localStorage`, por lo que podría redirigirse automáticamente al home sin requerir login.
+
+**Fix:**
+```js
+document.querySelector("#logoutBtn")?.addEventListener("click", () => {
+  removeSession(); // ✅ Limpiar sesión primero
+  navigateTo("/");
+});
+```
+
+---
+
+### Resumen
+
+| # | Archivo | Tipo | Descripción |
+|---|---------|------|-------------|
+| 1 | `home.controller.js` | 🔴 Runtime Error | Llama `getReservations()` que no existe |
+| 2 | `home.controller.js` | 🔴 Build Error | Alias de imports incorrectos (`@components` en vez de `@/components`) |
+| 3 | `Sidebar.js` | 🟡 Logic Bug | Logout no elimina la sesión del `localStorage` |
