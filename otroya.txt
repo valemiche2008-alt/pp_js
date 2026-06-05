@@ -1,0 +1,70 @@
+Déjame revisar más a fondo algunos detalles que pude haber pasado por alto.Sí, hay más cosas. Acá el análisis completo adicional:
+
+---
+
+### 🔴 Error 9 — El botón "Volver al inicio" de `notFound.js` no tiene lógica
+**`src/views/notFound.js`**
+
+El botón con `id="goHome"` se renderiza pero nunca se le agrega un `addEventListener`. Al hacer clic, no pasa nada. Le falta un controller o un `setTimeout` igual al patrón que usa el resto de las vistas:
+
+```js
+export default function NotFoundView() {
+  setTimeout(() => {
+    document.querySelector("#goHome")?.addEventListener("click", () => {
+      navigateTo("/");
+    });
+  });
+  // ...
+}
+```
+
+---
+
+### 🟡 Error 10 — `loginView` no redirige si ya hay sesión activa
+**`src/views/loginView.js`**
+
+Si un usuario ya logueado navega manualmente a `/`, ve el formulario de login en lugar de ser redirigido a `/home`. Debería haber un guard:
+
+```js
+export default function loginView() {
+  if (isAuthenticated()) {
+    navigateTo("/home");
+    return "";
+  }
+  // ...
+}
+```
+
+---
+
+### 🟡 Error 11 — `setTimeout` sin delay en todas las vistas
+**`Sidebar.js`, `homeView.js`, `loginView.js`**
+
+Los tres usan `setTimeout(() => { ... })` sin segundo argumento para esperar a que el DOM esté listo. Esto funciona por accidente (el callback se encola al final del event loop), pero es un antipatrón frágil. El patrón correcto para este tipo de SPA sería retornar el HTML y luego ejecutar los listeners de forma explícita, o al menos documentar el porqué del `setTimeout`.
+
+---
+
+### 🟡 Error 12 — `isAdmin` y `createReservation` exportadas pero nunca usadas
+**`src/utils.js` y `src/services/reservation.service.js`**
+
+`isAdmin()` está exportada en `utils.js` pero ningún archivo la importa. Lo mismo con `createReservation` en el servicio. No es un error de runtime, pero indica que funcionalidad prometida (crear reservas, verificar rol de admin) nunca se conectó.
+
+---
+
+### Resumen actualizado completo
+
+| # | Archivo | Severidad | Descripción |
+|---|---------|-----------|-------------|
+| 1 | `home.controller.js` | 🔴 Runtime | Llama `getReservations()` que no existe |
+| 3 | `Sidebar.js` | 🔴 Lógica | Logout no elimina la sesión |
+| 4 | `router.js` | 🔴 Seguridad | Rutas privadas sin protección |
+| 5 | `router.js` | 🔴 Funcional | `notFound.js` nunca se conecta al router |
+| 6 | `homeView.js` | 🟡 Errores | `homeController()` async sin `.catch()` |
+| 7 | `homeView.js` | 🟡 Robustez | Renderiza con sesión nula sin redirigir |
+| 8 | `home.controller.js` | 🟡 Code smell | `container.innerHTML` asignado dos veces |
+| 9 | `notFound.js` | 🔴 Funcional | Botón "Volver al inicio" sin listener |
+| 10 | `loginView.js` | 🟡 UX | No redirige si ya hay sesión activa |
+| 11 | Vistas (3 archivos) | 🟡 Antipatrón | `setTimeout` sin delay como sustituto de lifecycle |
+| 12 | `utils.js` / `service` | 🟡 Incompleto | `isAdmin` y `createReservation` exportadas y nunca usadas |
+
+Eso sí es todo lo que hay en el código entregado. Los errores más graves son el **1**, **3**, **4**, **5** y **9**.
