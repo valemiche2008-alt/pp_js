@@ -1,0 +1,120 @@
+Aquí está el análisis completo con todo lo que encontré, incluyendo los 3 de antes más los nuevos:
+
+---
+
+### 🔴 Error 1 — Función inexistente: `getReservations` *(ya reportado)*
+**`home.controller.js` línea 4**
+El servicio exporta `getReservation` (sin "s"), pero el controller llama `getReservations()`. Falla en runtime.
+
+---
+
+### 🔴 Error 2 — Aliases incorrectos en el import *(ya reportado)*
+**`home.controller.js` líneas 1–2**
+Usa `@components` y `@services` — que sí existen en `vite.config.js`, así que en realidad **este no es un error**. Me corrijo: el `vite.config.js` define ambos alias (`@components` y `@/components`) por separado, los dos son válidos. ✅
+
+---
+
+### 🔴 Error 3 — Logout no llama `removeSession()` *(ya reportado)*
+**`Sidebar.js`** — `removeSession` importada pero nunca usada.
+
+---
+
+### 🔴 Error 4 — El router no protege rutas privadas
+**`src/router/router.js`**
+
+`isAuthenticated` está importada pero **nunca se usa**:
+```js
+import { isAuthenticated } from "@/utils"; // ❌ importado y no usado
+```
+Cualquier usuario puede acceder directamente a `/home` escribiendo la URL, sin estar logueado. El router debería redirigir a `/` si no hay sesión:
+
+```js
+export const router = () => {
+  const app = document.querySelector("#app");
+  let path = window.location.pathname;
+
+  // Guard de ruta
+  if (path === "/home" && !isAuthenticated()) {
+    return navigateTo("/");
+  }
+
+  const view = routes[path] || loginView;
+  app.innerHTML = view();
+};
+```
+
+---
+
+### 🔴 Error 5 — No hay vista 404 conectada al router
+**`src/router/router.js`**
+
+Existe el archivo `src/views/notFound.js` pero el router nunca lo importa ni lo usa. Las rutas desconocidas caen en `loginView` en lugar de mostrar la página 404:
+
+```js
+const view = routes[path] || loginView; // ❌ debería ser notFound
+```
+
+**Fix:**
+```js
+import notFound from "@/views/notFound";
+// ...
+const view = routes[path] || notFound;
+```
+
+---
+
+### 🟡 Error 6 — `homeView` llama `homeController` sin manejar el error
+**`src/views/homeView.js` línea 8**
+
+```js
+setTimeout(() => {
+  homeController(); // ❌ es async pero no se usa await ni .catch()
+});
+```
+
+Si `homeController` falla (API caída, sesión inválida), el error se traga silenciosamente y el usuario solo ve "Cargando reservas..." eternamente.
+
+**Fix:**
+```js
+setTimeout(() => {
+  homeController().catch(console.error);
+});
+```
+
+---
+
+### 🟡 Error 7 — `homeView` rompe si no hay sesión
+**`src/views/homeView.js` línea 3**
+
+```js
+const user = getSession(); // puede retornar null
+```
+
+Luego se usa `user?.name`, `user?.role`, etc. con optional chaining, lo que evita un crash inmediato, pero si `user` es `null` y no hay guard en el router (Error 4), la vista se renderiza con datos vacíos sin redirigir.
+
+---
+
+### 🟡 Error 8 — `container.innerHTML` asignado dos veces
+**`home.controller.js` línea 12**
+
+```js
+container.innerHTML = container.innerHTML = filteredReservations?.length
+```
+
+Hay una doble asignación `container.innerHTML = container.innerHTML = ...`. No rompe nada pero es un bug de escritura que indica descuido.
+
+---
+
+### 📋 Resumen general
+
+| # | Archivo | Severidad | Descripción |
+|---|---------|-----------|-------------|
+| 1 | `home.controller.js` | 🔴 Runtime | Llama `getReservations()` que no existe |
+| 3 | `Sidebar.js` | 🔴 Lógica | Logout no elimina la sesión |
+| 4 | `router.js` | 🔴 Seguridad | `isAuthenticated` importada pero nunca usada — rutas sin proteger |
+| 5 | `router.js` | 🔴 Funcional | `notFound.js` existe pero nunca se conecta al router |
+| 6 | `homeView.js` | 🟡 Manejo de errores | `homeController()` async sin `.catch()` |
+| 7 | `homeView.js` | 🟡 Robustez | Renderiza con sesión nula si no hay guard |
+| 8 | `home.controller.js` | 🟡 Code smell | `container.innerHTML` asignado dos veces |
+
+Los más críticos para corregir primero son el **4** (seguridad de rutas) y el **1** (la app no carga reservas).
